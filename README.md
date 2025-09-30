@@ -1,3 +1,30 @@
+**Warning: use at your own risks!**
+
+Unofficial [WebArena](https://github.com/web-arena-x/webarena) port for compatibility with [BrowserGym](https://github.com/ServiceNow/BrowserGym). Changes below.
+
+More flexible/recent dependencies
+ - playwright~=1.39
+ - openai>=1
+ - transformers
+
+Packaging into a single Python namespace
+```bash
+pip install libwebarena
+```
+
+```python
+import webarena
+import webarena.browser_env
+import webarena.agent
+import webarena.evaluation_harness
+import webarena.llms
+import webarena.llms.providers
+```
+
+Making `HTMLContentEvaluator` idempotent (`validate()` should not alter the browser's state)
+
+---
+
 # WebArena: A Realistic Web Environment for Building Autonomous Agents
 <p align="center">
     <img src="media/logo.png" alt="Logo" width="80px">
