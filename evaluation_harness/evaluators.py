@@ -13,9 +13,9 @@ from beartype import beartype
 from nltk.tokenize import word_tokenize
 from playwright.sync_api import CDPSession, Page
 
-from browser_env.actions import Action
-from browser_env.utils import StateInfo
-from evaluation_harness.helper_functions import (
+from ..browser_env.actions import Action
+from ..browser_env.utils import StateInfo
+from .helper_functions import (
     PseudoPage,
     gitlab_get_project_memeber_role,
     llm_fuzzy_match,
@@ -268,7 +268,10 @@ class HTMLContentEvaluator(Evaluator):
             locator: str = target["locator"]  # js element locator
 
             # navigate to that url
+            prev_page = None
             if target_url != "last":
+                prev_page = page
+                page = page.context.new_page()
                 page.goto(target_url)
                 time.sleep(3)  # TODO [shuyanzh]: fix this hard-coded sleep
 
@@ -330,6 +333,12 @@ class HTMLContentEvaluator(Evaluator):
                 raise ValueError(
                     f"Unknown required_contents: {target['required_contents'].keys()}"
                 )
+
+            if prev_page:
+                page.close()
+                page = prev_page
+                prev_page = None
+
         return score
 
 
@@ -343,7 +352,7 @@ class EvaluatorComb:
         trajectory: Trajectory,
         config_file: Path | str,
         page: Page | PseudoPage,
-        client: CDPSession,
+        client: CDPSession | None,
     ) -> float:
         score = 1.0
         for evaluator in self.evaluators:

@@ -1,5 +1,5 @@
 name: Python Package Pytest
-on: [push]
+on: workflow_dispatch
 
 jobs:
   test-all:
