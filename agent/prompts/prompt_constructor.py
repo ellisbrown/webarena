@@ -2,10 +2,11 @@ import json
 import re
 from pathlib import Path
 from typing import Any, TypedDict
+from PIL import Image
 
 from ...browser_env import Action, ActionParsingError, Trajectory
 from ...browser_env.env_config import URL_MAPPINGS
-from ...browser_env.utils import StateInfo
+from ...browser_env.utils import StateInfo, pil_to_b64, pil_to_vertex, map_url, extract_action_from_response
 from ...llms import lm_config
 from ...llms.tokenizers import Tokenizer
 from ...llms.utils import APIInput
@@ -119,22 +120,17 @@ class PromptConstructor(object):
     ) -> APIInput:
         raise NotImplementedError
 
-    def map_url_to_real(self, url: str) -> str:
-        """Map the urls to their real world counterparts"""
-        for i, j in URL_MAPPINGS.items():
-            if i in url:
-                url = url.replace(i, j)
-        return url
+    @staticmethod
+    def map_url_to_real(url: str) -> str:
+        """Map all local URLs to their real-world counterparts within arbitrary text."""
+        return map_url(url, URL_MAPPINGS)  # local -> real
 
-    def map_url_to_local(self, url: str) -> str:
-        """Map the urls to their local counterparts"""
-        for i, j in URL_MAPPINGS.items():
-            if j in url:
-                url = url.replace(j, i)
-            # https
-            if j.replace("http", "https") in url:
-                url = url.replace(j.replace("http", "https"), i)
-        return url
+    @staticmethod
+    def map_url_to_local(url: str) -> str:
+        """Map all real URLs to their local counterparts within arbitrary text."""
+        # invert mapping: real -> local
+        real_to_local = {v: k for k, v in URL_MAPPINGS.items()}
+        return map_url(url, real_to_local)
 
     def _extract_action(self, response: str) -> str:
         raise NotImplementedError
@@ -172,7 +168,11 @@ class DirectPromptConstructor(PromptConstructor):
         obs = state_info["observation"][self.obs_modality]
         max_obs_length = self.lm_config.gen_config["max_obs_length"]
         if max_obs_length:
-            obs = self.tokenizer.decode(self.tokenizer.encode(obs)[:max_obs_length])  # type: ignore[arg-type]
+            if self.lm_config.provider == "google":
+                print("NOTE: This is a Gemini model, so we use characters instead of tokens for max_obs_length.")
+                obs = obs[:max_obs_length]
+            else:
+                obs = self.tokenizer.decode(self.tokenizer.encode(obs)[:max_obs_length])  # type: ignore[arg-type]
 
         page = state_info["info"]["page"]
         url = page.url
@@ -193,14 +193,12 @@ class DirectPromptConstructor(PromptConstructor):
 
     def _extract_action(self, response: str) -> str:
         action_splitter = self.instruction["meta_data"]["action_splitter"]
-        pattern = rf"{action_splitter}((.|\n)*?){action_splitter}"
-        match = re.search(pattern, response)
-        if match:
-            return match.group(1).strip()
-        else:
+        match = extract_action_from_response(response, action_splitter)
+        if match is None:
             raise ActionParsingError(
                 f"Cannot parse action from response {response}"
             )
+        return match
 
 
 class CoTPromptConstructor(PromptConstructor):
@@ -230,7 +228,11 @@ class CoTPromptConstructor(PromptConstructor):
         obs = state_info["observation"][self.obs_modality]
         max_obs_length = self.lm_config.gen_config["max_obs_length"]
         if max_obs_length:
-            obs = self.tokenizer.decode(self.tokenizer.encode(obs)[:max_obs_length])  # type: ignore[arg-type]
+            if self.lm_config.provider == "google":
+                print("NOTE: This is a Gemini model, so we use characters instead of tokens for max_obs_length.")
+                obs = obs[:max_obs_length]
+            else:
+                obs = self.tokenizer.decode(self.tokenizer.encode(obs)[:max_obs_length])  # type: ignore[arg-type]
 
         page = state_info["info"]["page"]
         url = page.url
@@ -248,13 +250,187 @@ class CoTPromptConstructor(PromptConstructor):
         return prompt
 
     def _extract_action(self, response: str) -> str:
-        # find the first occurence of action
         action_splitter = self.instruction["meta_data"]["action_splitter"]
-        pattern = rf"{action_splitter}((.|\n)*?){action_splitter}"
-        match = re.search(pattern, response)
-        if match:
-            return match.group(1).strip()
-        else:
+        match = extract_action_from_response(response, action_splitter)
+        if match is None:
             raise ActionParsingError(
                 f'Cannot find the answer phrase "{self.answer_phrase}" in "{response}"'
+            )
+        return match
+
+
+class MultimodalCoTPromptConstructor(CoTPromptConstructor):
+    """The agent will perform step-by-step reasoning before the answer"""
+
+    def __init__(
+        self,
+        instruction_path: str | Path,
+        lm_config: lm_config.LMConfig,
+        tokenizer: Tokenizer,
+    ):
+        super().__init__(instruction_path, lm_config, tokenizer)
+        self.answer_phrase = self.instruction["meta_data"]["answer_phrase"]
+
+    def construct(
+        self,
+        trajectory: Trajectory,
+        intent: str,
+        page_screenshot_img: Image.Image,
+        images: list[Image.Image],
+        meta_data: dict[str, Any] = {},
+    ) -> APIInput:
+        intro = self.instruction["intro"]
+        examples = self.instruction["examples"]
+        template = self.instruction["template"]
+        keywords = self.instruction["meta_data"]["keywords"]
+        state_info: StateInfo = trajectory[-1]  # type: ignore[assignment]
+
+        obs = state_info["observation"][self.obs_modality]
+        max_obs_length = self.lm_config.gen_config["max_obs_length"]
+        if max_obs_length:
+            if self.lm_config.provider == "google":
+                print("NOTE: This is a Gemini model, so we use characters instead of tokens for max_obs_length.")
+                obs = obs[:max_obs_length]
+            else:
+                obs = self.tokenizer.decode(self.tokenizer.encode(obs)[:max_obs_length])  # type: ignore[arg-type]
+
+        page = state_info["info"]["page"]
+        url = page.url
+        previous_action_str = meta_data["action_history"][-1]
+        current = template.format(
+            objective=intent,
+            url=self.map_url_to_real(url),
+            observation=obs,
+            previous_action=previous_action_str,
+        )
+
+        assert all([f"{{k}}" not in current for k in keywords])
+
+        prompt = self.get_lm_api_input(
+            intro, examples, current, page_screenshot_img, images
+        )
+        return prompt
+
+    def get_lm_api_input(
+        self,
+        intro: str,
+        examples: list[tuple[str, str, str]],
+        current: str,
+        page_screenshot_img: Image.Image,
+        images: list[Image.Image],
+    ) -> APIInput:
+        """Return the require format for an API"""
+        message: list[dict[str, str]] | str | list[str | Image.Image]
+        if "openai" in self.lm_config.provider:
+            if self.lm_config.mode == "chat":
+                message = [
+                    {
+                        "role": "system",
+                        "content": [{"type": "text", "text": intro}],
+                    }
+                ]
+                for (x, y, z) in examples:
+                    example_img = Image.open(z)
+                    message.append(
+                        {
+                            "role": "user" if "gpt-4o" in self.lm_config.model else "system",
+                            "name": "example_user",
+                            "content": [
+                                {"type": "text", "text": x},
+                                {
+                                    "type": "text",
+                                    "text": "IMAGES: (1) current page screenshot",
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": pil_to_b64(example_img)
+                                    },
+                                },
+                            ],
+                        }
+                    )
+                    message.append(
+                        {
+                            "role": "user" if "gpt-4o" in self.lm_config.model else "system",
+                            "name": "example_assistant",
+                            "content": [{"type": "text", "text": y}],
+                        }
+                    )
+
+                # Encode images and page_screenshot_img as base64 strings.
+                current_prompt = current
+                content = [
+                    {
+                        "type": "text",
+                        "text": "IMAGES: (1) current page screenshot",
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": pil_to_b64(page_screenshot_img)},
+                    },
+                ]
+                for image_i, image in enumerate(images):
+                    content.extend(
+                        [
+                            {
+                                "type": "text",
+                                "text": f"({image_i+2}) input image {image_i+1}",
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": pil_to_b64(image)},
+                            },
+                        ]
+                    )
+                content = [{"type": "text", "text": current_prompt}] + content
+
+                message.append({"role": "user", "content": content})
+                return message
+            else:
+                raise ValueError(
+                    f"GPT-4V models do not support mode {self.lm_config.mode}"
+                )
+        elif "google" in self.lm_config.provider:
+            if self.lm_config.mode == "completion":
+                message = [
+                    intro,
+                    "Here are a few examples:",
+                ]
+                for (x, y, z) in examples:
+                    example_img = Image.open(z)
+                    message.append(f"Observation\n:{x}\n")
+                    message.extend(
+                        [
+                            "IMAGES:",
+                            "(1) current page screenshot:",
+                            pil_to_vertex(example_img),
+                        ]
+                    )
+                    message.append(f"Action: {y}")
+                message.append("Now make prediction given the observation")
+                message.append(f"Observation\n:{current}\n")
+                message.extend(
+                    [
+                        "IMAGES:",
+                        "(1) current page screenshot:",
+                        pil_to_vertex(page_screenshot_img),
+                    ]
+                )
+                for image_i, image in enumerate(images):
+                    message.extend(
+                        [
+                            f"({image_i+2}) input image {image_i+1}",
+                            pil_to_vertex(image),
+                        ]
+                    )
+                message.append("Action:")
+                return message
+            else:
+                raise ValueError(
+                    f"Gemini models do not support mode {self.lm_config.mode}"
+                )
+        else:
+            raise NotImplementedError(
+                f"Provider {self.lm_config.provider} not implemented"
             )

@@ -1,6 +1,7 @@
 # websites domain
 import os
 
+
 REDDIT = os.environ.get("REDDIT", "")
 SHOPPING = os.environ.get("SHOPPING", "")
 SHOPPING_ADMIN = os.environ.get("SHOPPING_ADMIN", "")

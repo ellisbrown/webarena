@@ -1,9 +1,10 @@
 import argparse
 import json
-from typing import Any
+from typing import Any, Optional
 
 import tiktoken
 from beartype import beartype
+from PIL import Image
 
 from .prompts import *
 from ..browser_env import Trajectory
@@ -106,22 +107,61 @@ class PromptAgent(Agent):
         action_set_tag: str,
         lm_config: lm_config.LMConfig,
         prompt_constructor: PromptConstructor,
+        captioning_fn = None
     ) -> None:
         super().__init__()
         self.lm_config = lm_config
         self.prompt_constructor = prompt_constructor
         self.action_set_tag = action_set_tag
+        self.captioning_fn = captioning_fn
+
+        # Check if the model is multimodal.
+        if ("gemini" in lm_config.model or "gpt-4" in lm_config.model and "vision" in lm_config.model or "gpt-4o" in lm_config.model) and type(prompt_constructor) == MultimodalCoTPromptConstructor:
+            self.multimodal_inputs = True
+        else:
+            self.multimodal_inputs = False
 
     def set_action_set_tag(self, tag: str) -> None:
         self.action_set_tag = tag
 
     @beartype
     def next_action(
-        self, trajectory: Trajectory, intent: str, meta_data: dict[str, Any]
+        self, trajectory: Trajectory, intent: str, meta_data: dict[str, Any], images: Optional[list[Image.Image]] = None,
+        output_response: bool = False
     ) -> Action:
-        prompt = self.prompt_constructor.construct(
-            trajectory, intent, meta_data
-        )
+        # Create page screenshot image for multimodal models.
+        if self.multimodal_inputs:
+            page_screenshot_arr = trajectory[-1]["observation"]["image"]
+            page_screenshot_img = Image.fromarray(
+                page_screenshot_arr
+            )  # size = (viewport_width, viewport_width)
+
+        # Caption the input image, if provided.
+        if images is not None and len(images) > 0:
+            if self.captioning_fn is not None:
+                image_input_caption = ""
+                for image_i, image in enumerate(images):
+                    if image_i == 0:
+                        image_input_caption += f'Input image {image_i+1}: "{self.captioning_fn([image])[0]}"'
+                    else:
+                        image_input_caption += f'input image {image_i+1}: "{self.captioning_fn([image])[0]}"'
+                    if len(images) > 1:
+                        image_input_caption += ", "
+                # Update intent to include captions of input images.
+                intent = f"{image_input_caption}\nIntent: {intent}"
+            elif not self.multimodal_inputs:
+                print(
+                    "WARNING: Input image provided but no image captioner available."
+                )
+
+        if self.multimodal_inputs:
+            prompt = self.prompt_constructor.construct(
+                trajectory, intent, page_screenshot_img, images, meta_data
+            )
+        else:
+            prompt = self.prompt_constructor.construct(
+                trajectory, intent, meta_data
+            )
         lm_config = self.lm_config
         n = 0
         while True:
@@ -130,6 +170,8 @@ class PromptAgent(Agent):
                 "meta_data"
             ].get("force_prefix", "")
             response = f"{force_prefix}{response}"
+            if output_response:
+                print(f'Agent: {response}', flush=True)
             n += 1
             try:
                 parsed_response = self.prompt_constructor.extract_action(
@@ -139,6 +181,8 @@ class PromptAgent(Agent):
                     action = create_id_based_action(parsed_response)
                 elif self.action_set_tag == "playwright":
                     action = create_playwright_action(parsed_response)
+                elif self.action_set_tag == "som":
+                    action = create_id_based_action(parsed_response)
                 else:
                     raise ValueError(
                         f"Unknown action type {self.action_set_tag}"
@@ -157,7 +201,7 @@ class PromptAgent(Agent):
         pass
 
 
-def construct_agent(args: argparse.Namespace) -> Agent:
+def construct_agent(args: argparse.Namespace, captioning_fn=None) -> Agent:
     llm_config = lm_config.construct_llm_config(args)
 
     agent: Agent
@@ -174,6 +218,7 @@ def construct_agent(args: argparse.Namespace) -> Agent:
             action_set_tag=args.action_set_tag,
             lm_config=llm_config,
             prompt_constructor=prompt_constructor,
+            captioning_fn=captioning_fn
         )
     else:
         raise NotImplementedError(

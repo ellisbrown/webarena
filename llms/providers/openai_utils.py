@@ -6,33 +6,43 @@ import logging
 import os
 import random
 import time
-from typing import Any
+from typing import Any, Union
 
 import aiolimiter
 import openai
+from openai import AsyncOpenAI, OpenAI, AzureOpenAI, AsyncAzureOpenAI
 from tqdm.asyncio import tqdm_asyncio
 
-_client: openai.OpenAI = None
-def get_openai_client():
-    global _client
-    if "OPENAI_API_KEY" not in os.environ:
-        raise ValueError(
-            "OPENAI_API_KEY environment variable must be set when using OpenAI API."
-        )
-    if not _client:
-        _client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"], organization=os.environ.get("OPENAI_ORGANIZATION", ""))
-    return _client
+from ezcolorlog import root_logger as logger
 
-_aclient: openai.AsyncOpenAI = None
-def get_openai_aclient():
-    global _aclient
-    if "OPENAI_API_KEY" not in os.environ:
-        raise ValueError(
-            "OPENAI_API_KEY environment variable must be set when using OpenAI API."
-        )
-    if not _aclient:
-        _aclient = openai.AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"], organization=os.environ.get("OPENAI_ORGANIZATION", ""))
-    return _aclient
+
+if "OPENAI_API_BASE" in os.environ:
+    # Used for running vllm models.
+    api_key = os.environ["OPENAI_API_KEY"]
+    api_base = os.environ["OPENAI_API_BASE"]
+    logger.warning(f"Using OPENAI_API_KEY={api_key}, OPENAI_API_BASE={api_base}")
+    client = OpenAI(
+        api_key=api_key, base_url=api_base
+    )
+    aclient = AsyncOpenAI(
+        api_key=api_key, base_url=api_base
+    )
+elif "USE_AZURE_OPENAI" in os.environ and os.environ["USE_AZURE_OPENAI"] == "True":
+    logger.warning("Using Azure OpenAI")
+    client = AzureOpenAI(
+        api_key=os.environ["AZURE_OPENAI_API_KEY"],
+        api_version=os.environ["AZURE_OPENAI_API_VERSION"],
+        azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+    )
+    aclient = AsyncAzureOpenAI(
+        api_key=os.environ["AZURE_OPENAI_API_KEY"],
+        api_version=os.environ["AZURE_OPENAI_API_VERSION"],
+        azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+    )
+else:
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    aclient = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
 
 def retry_with_exponential_backoff(  # type: ignore
     func,
@@ -40,7 +50,11 @@ def retry_with_exponential_backoff(  # type: ignore
     exponential_base: float = 2,
     jitter: bool = True,
     max_retries: int = 3,
-    errors: tuple[Any] = (openai.RateLimitError,),
+    errors: tuple[Any] = (
+        openai.RateLimitError,
+        openai.BadRequestError,
+        openai.InternalServerError,
+    ),
 ):
     """Retry a function with exponential backoff."""
 
@@ -52,11 +66,15 @@ def retry_with_exponential_backoff(  # type: ignore
         # Loop until a successful response or max_retries is hit or an exception is raised
         while True:
             try:
+
                 return func(*args, **kwargs)
+
             # Retry on specified errors
             except errors as e:
                 # Increment retries
                 num_retries += 1
+
+                logger.error(f"OpenAI API error: {e}. Retrying...", exc_info=True)
 
                 # Check if max retries has been reached
                 if num_retries > max_retries:
@@ -66,7 +84,7 @@ def retry_with_exponential_backoff(  # type: ignore
 
                 # Increment the delay
                 delay *= exponential_base * (1 + jitter * random.random())
-                print(f"Retrying in {delay} seconds.")
+                logger.info(f"Retrying in {delay} seconds.")
                 # Sleep for the delay
                 time.sleep(delay)
 
@@ -85,11 +103,10 @@ async def _throttled_openai_completion_acreate(
     top_p: float,
     limiter: aiolimiter.AsyncLimiter,
 ) -> dict[str, Any]:
-    aclient = get_openai_aclient()
     async with limiter:
         for _ in range(3):
             try:
-                return await aclient.completions.create(# type: ignore
+                return await aclient.completions.create(
                     engine=engine,
                     prompt=prompt,
                     temperature=temperature,
@@ -104,7 +121,7 @@ async def _throttled_openai_completion_acreate(
             except openai.APIError as e:
                 logging.warning(f"OpenAI API error: {e}")
                 break
-        return None
+        return {"choices": [{"message": {"content": ""}}]}
 
 
 async def agenerate_from_openai_completion(
@@ -113,7 +130,6 @@ async def agenerate_from_openai_completion(
     temperature: float,
     max_tokens: int,
     top_p: float,
-    context_length: int,
     requests_per_minute: int = 300,
 ) -> list[str]:
     """Generate from OpenAI Completion API.
@@ -123,12 +139,16 @@ async def agenerate_from_openai_completion(
         temperature: Temperature to use.
         max_tokens: Maximum number of tokens to generate.
         top_p: Top p to use.
-        context_length: Length of context to use.
         requests_per_minute: Number of requests per minute to allow.
 
     Returns:
         List of generated responses.
     """
+    if "OPENAI_API_KEY" not in os.environ:
+        raise ValueError(
+            "OPENAI_API_KEY environment variable must be set when using OpenAI API."
+        )
+
     limiter = aiolimiter.AsyncLimiter(requests_per_minute)
     async_responses = [
         _throttled_openai_completion_acreate(
@@ -152,15 +172,14 @@ def generate_from_openai_completion(
     temperature: float,
     max_tokens: int,
     top_p: float,
-    context_length: int,
     stop_token: str | None = None,
 ) -> str:
     if "OPENAI_API_KEY" not in os.environ:
         raise ValueError(
             "OPENAI_API_KEY environment variable must be set when using OpenAI API."
         )
-    client = get_openai_client()
-    response = client.completions.create(# type: ignore
+
+    response = client.completions.create(
         prompt=prompt,
         engine=engine,
         temperature=temperature,
@@ -180,11 +199,10 @@ async def _throttled_openai_chat_completion_acreate(
     top_p: float,
     limiter: aiolimiter.AsyncLimiter,
 ) -> dict[str, Any]:
-    aclient = get_openai_aclient()
     async with limiter:
         for _ in range(3):
             try:
-                return await aclient.chat.completions.create(# type: ignore
+                return await aclient.chat.completions.create(
                     model=model,
                     messages=messages,
                     temperature=temperature,
@@ -202,7 +220,7 @@ async def _throttled_openai_chat_completion_acreate(
             except openai.APIError as e:
                 logging.warning(f"OpenAI API error: {e}")
                 break
-        return None
+        return {"choices": [{"message": {"content": ""}}]}
 
 
 async def agenerate_from_openai_chat_completion(
@@ -211,7 +229,6 @@ async def agenerate_from_openai_chat_completion(
     temperature: float,
     max_tokens: int,
     top_p: float,
-    context_length: int,
     requests_per_minute: int = 300,
 ) -> list[str]:
     """Generate from OpenAI Chat Completion API.
@@ -221,12 +238,15 @@ async def agenerate_from_openai_chat_completion(
         temperature: Temperature to use.
         max_tokens: Maximum number of tokens to generate.
         top_p: Top p to use.
-        context_length: Length of context to use.
         requests_per_minute: Number of requests per minute to allow.
 
     Returns:
         List of generated responses.
     """
+    if "OPENAI_API_KEY" not in os.environ:
+        raise ValueError(
+            "OPENAI_API_KEY environment variable must be set when using OpenAI API."
+        )
 
     limiter = aiolimiter.AsyncLimiter(requests_per_minute)
     async_responses = [
@@ -241,7 +261,11 @@ async def agenerate_from_openai_chat_completion(
         for message in messages_list
     ]
     responses = await tqdm_asyncio.gather(*async_responses)
-    return [x.choices[0].message.content for x in responses]
+    print(responses)
+    return [
+        x.choices[0].message.content if hasattr(x, 'choices') else x["choices"][0]["message"]["content"]
+        for x in responses
+    ]
 
 
 @retry_with_exponential_backoff
@@ -251,19 +275,31 @@ def generate_from_openai_chat_completion(
     temperature: float,
     max_tokens: int,
     top_p: float,
-    context_length: int,
     stop_token: str | None = None,
-) -> str:
-    client = get_openai_client()
-    response = client.chat.completions.create(# type: ignore
+    num_outputs: int = 1,
+) -> Union[str, list[str]]:
+    if "OPENAI_API_KEY" not in os.environ:
+        raise ValueError(
+            "OPENAI_API_KEY environment variable must be set when using OpenAI API."
+        )
+    if "OPENAI_API_BASE" in os.environ:
+        # assert "llama" in model.lower()
+        logger.warning(f"Using OPENAI_API_BASE: {os.environ['OPENAI_API_BASE']}")
+
+    response = client.chat.completions.create(
         model=model,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
         top_p=top_p,
         stop=[stop_token] if stop_token else None,
+        n=num_outputs
     )
-    answer: str = response.choices[0].message.content
+    if num_outputs > 1:
+        answer: list[str] = [x.message.content for x in response.choices]
+    else:
+        answer: str = response.choices[0].message.content
+
     return answer
 
 
@@ -275,8 +311,12 @@ def fake_generate_from_openai_chat_completion(
     temperature: float,
     max_tokens: int,
     top_p: float,
-    context_length: int,
     stop_token: str | None = None,
 ) -> str:
+    if "OPENAI_API_KEY" not in os.environ:
+        raise ValueError(
+            "OPENAI_API_KEY environment variable must be set when using OpenAI API."
+        )
+
     answer = "Let's think step-by-step. This page shows a list of links and buttons. There is a search box with the label 'Search query'. I will click on the search box to type the query. So the action I will perform is \"click [60]\"."
     return answer

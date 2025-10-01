@@ -84,6 +84,7 @@ class ScriptBrowserEnv(Env[dict[str, Observation], Action]):
         viewport_size: ViewportSize = {"width": 1280, "height": 720},
         save_trace_enabled: bool = False,
         sleep_after_execution: float = 0.0,
+        captioning_fn=None,
     ):
         # TODO: make Space[Action] = ActionSpace
         self.action_space = get_action_space()  # type: ignore[assignment]
@@ -96,13 +97,17 @@ class ScriptBrowserEnv(Env[dict[str, Observation], Action]):
         self.sleep_after_execution = sleep_after_execution
 
         match observation_type:
-            case "html" | "accessibility_tree":
+            case "html" | "accessibility_tree" | "accessibility_tree_with_captioner":
                 self.text_observation_type = observation_type
                 self.image_observation_type = ""
                 self.main_observation_type = "text"
             case "image":
                 self.image_observation_type = observation_type
                 self.text_observation_type = ""  # type: ignore[assignment]
+                self.main_observation_type = "image"
+            case "image_som":
+                self.image_observation_type = observation_type
+                self.text_observation_type = observation_type  # type: ignore[assignment]
                 self.main_observation_type = "image"
             case _:
                 raise ValueError(
@@ -115,6 +120,7 @@ class ScriptBrowserEnv(Env[dict[str, Observation], Action]):
             self.image_observation_type,
             self.current_viewport_only,
             self.viewport_size,
+            captioning_fn,
         )
 
         self.observation_space = (
@@ -139,12 +145,19 @@ class ScriptBrowserEnv(Env[dict[str, Observation], Action]):
         start_url = instance_config.get("start_url", None)
         geolocation = instance_config.get("geolocation", None)
 
+        # Use custom viewport size if specified in the config, otherwise use the default.
+        viewport_size = self.viewport_size.copy()
+        viewport_size.update(instance_config.get("viewport_size", {}))
+        self.observation_handler.viewport_size = viewport_size
+
         self.context = self.browser.new_context(
-            viewport=self.viewport_size,
+            viewport=viewport_size,
             storage_state=storage_state,
             geolocation=geolocation,
             device_scale_factor=1,
         )
+        # Add event listener for new page creation (e.g., from target="_blank" links)
+        self.context.on("page", lambda page: self._handle_new_page(page))
         if self.save_trace_enabled:
             self.context.tracing.start(screenshots=True, snapshots=True)
         if start_url:
@@ -154,9 +167,12 @@ class ScriptBrowserEnv(Env[dict[str, Observation], Action]):
                 client = page.context.new_cdp_session(
                     page
                 )  # talk to chrome devtools
-                if self.text_observation_type == "accessibility_tree":
+                if self.text_observation_type in [
+                    "accessibility_tree",
+                    "accessibility_tree_with_captioner",
+                ]:
                     client.send("Accessibility.enable")
-                page.client = client  # type: ignore # TODO[shuyanzh], fix this hackey client
+                page.client = client  # type: ignore
                 page.goto(url)
             # set the first page as the current page
             self.page = self.context.pages[0]
@@ -164,12 +180,28 @@ class ScriptBrowserEnv(Env[dict[str, Observation], Action]):
         else:
             self.page = self.context.new_page()
             client = self.page.context.new_cdp_session(self.page)
-            if self.text_observation_type == "accessibility_tree":
+            if self.text_observation_type in [
+                "accessibility_tree",
+                "accessibility_tree_with_captioner",
+            ]:
                 client.send("Accessibility.enable")
             self.page.client = client  # type: ignore
 
     def get_page_client(self, page: Page) -> CDPSession:
         return page.client  # type: ignore
+
+    def _handle_new_page(self, page: Page) -> None:
+        """Handle new page creation (e.g., from target='_blank' links)"""
+        client = page.context.new_cdp_session(page)
+        if self.text_observation_type in [
+            "accessibility_tree",
+            "accessibility_tree_with_captioner",
+        ]:
+            client.send("Accessibility.enable")
+        page.client = client  # type: ignore
+        # Switch to the new page
+        self.page = page
+        page.bring_to_front()
 
     def _get_obs(self) -> dict[str, Observation]:
         obs = self.observation_handler.get_observation(
@@ -227,6 +259,10 @@ class ScriptBrowserEnv(Env[dict[str, Observation], Action]):
     def close(self) -> None:
         if self.reset_finished:
             self.context_manager.__exit__()
+        # # Save url2captions
+        # with open("url2captions_blip2.json", "w") as wf:
+        #     json.dump(self.observation_handler.text_processor.url2caption, wf)
+        #     print(f"Saving url2captions_blip2.json with {len(self.observation_handler.text_processor.url2caption)} entries")
 
     def step(
         self, action: Action

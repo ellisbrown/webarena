@@ -29,7 +29,10 @@ from .actions import (
     create_select_option_action,
     create_stop_action,
     create_type_action,
+    create_clear_action,
+    create_focus_action,
     is_equivalent,
+    preprocess_action_kwargs,
 )
 from .async_envs import AsyncScriptBrowserEnv
 from .envs import ScriptBrowserEnv
@@ -71,6 +74,9 @@ __all__ = [
     "create_hover_action",
     "create_select_option_action",
     "create_stop_action",
+    "create_clear_action",
+    "create_focus_action",
     "ActionParsingError",
+    "preprocess_action_kwargs",
     "Trajectory",
 ]

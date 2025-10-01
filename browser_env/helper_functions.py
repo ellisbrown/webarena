@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from bs4 import BeautifulSoup
+
 from PIL import Image
 
 from ..agent.prompts import *
@@ -49,15 +51,37 @@ def get_render_action(
                 ]["text"]
             else:
                 node_content = "No match found"
-
-            action_str = f"<div class='raw_parsed_prediction' style='background-color:grey'><pre>{action['raw_prediction']}</pre></div>"
+            
+            action_str = "<h5>Raw Prediction</h5>"
+            action_str += f"<div class='raw_parsed_prediction' style='background-color:grey'><pre>{action['raw_prediction']}</pre></div>"
+            action_str += "<h5>Action Object</h5>"
             action_str += f"<div class='action_object' style='background-color:grey'><pre>{repr(action)}</pre></div>"
+            action_str += "<h5>Parsed Action</h5>"
+            action_str += f"<div class='parsed_action' style='background-color:yellow'><pre>{action2str(action, action_set_tag, node_content)}</pre></div>"
+
+        case "som":
+            meta_data = observation_metadata["image"]
+            if action["element_id"] in meta_data["obs_nodes_semantic_info"]:
+                node_content = meta_data["obs_nodes_semantic_info"][
+                    action["element_id"]
+                ]
+            else:
+                node_content = "No match found"
+
+            action_str = "<h5>Raw Prediction</h5>"
+            action_str += f"<div class='raw_parsed_prediction' style='background-color:grey'><pre>{action['raw_prediction']}</pre></div>"
+            action_str += "<h5>Action Object</h5>"
+            action_str += f"<div class='action_object' style='background-color:grey'><pre>{repr(action)}</pre></div>"
+            action_str += "<h5>Parsed Action</h5>"
             action_str += f"<div class='parsed_action' style='background-color:yellow'><pre>{action2str(action, action_set_tag, node_content)}</pre></div>"
 
         case "playwright":
+            action_str = "<h5>Playwright Code</h5>"
             action_str = action["pw_code"]
         case _:
-            raise ValueError(f"Unknown action type {action['action_type']}")
+            raise ValueError(
+                f"Unknown action type {action['action_type'], action_set_tag}"
+            )
     return action_str
 
 
@@ -101,6 +125,33 @@ def get_action_description(
                 else:
                     action_str = action2str(action, action_set_tag, "")
 
+        case "som":
+            meta_data = observation_metadata["image"]
+            if action["action_type"] in [
+                ActionTypes.CLICK,
+                ActionTypes.HOVER,
+                ActionTypes.TYPE,
+            ]:
+                action_name = str(action["action_type"]).split(".")[1].lower()
+                if action["element_id"] in meta_data["obs_nodes_semantic_info"]:
+                    node_content = meta_data["obs_nodes_semantic_info"][
+                        action["element_id"]
+                    ]
+                    action_str = action2str(action, action_set_tag, node_content)
+                else:
+                    action_str = f"Attempt to perfom \"{action_name}\" on element \"[{action['element_id']}]\" but no matching element found. Please check the observation more carefully."
+            else:
+                if (
+                    action["action_type"] == ActionTypes.NONE
+                    and prompt_constructor is not None
+                ):
+                    action_splitter = prompt_constructor.instruction[
+                        "meta_data"
+                    ]["action_splitter"]
+                    action_str = f'The previous prediction you issued was "{action["raw_prediction"]}". However, the format was incorrect. Ensure that the action is wrapped inside a pair of {action_splitter} and enclose arguments within [] as follows: {action_splitter}action [arg] ...{action_splitter}.'
+                else:
+                    action_str = action2str(action, action_set_tag, "")
+
         case "playwright":
             action_str = action["pw_code"]
 
@@ -114,7 +165,7 @@ class RenderHelper(object):
     """Helper class to render text and image observations and meta data in the trajectory"""
 
     def __init__(
-        self, config_file: str, result_dir: str, action_set_tag: str
+        self, config_file: str, output_path: Path, action_set_tag: str,
     ) -> None:
         with open(config_file, "r") as f:
             _config = json.load(f)
@@ -122,13 +173,13 @@ class RenderHelper(object):
             for k, v in _config.items():
                 _config_str += f"{k}: {v}\n"
             _config_str = f"<pre>{_config_str}</pre>\n"
-            task_id = _config["task_id"]
+
 
         self.action_set_tag = action_set_tag
+        render_file_path = Path(output_path)
+        render_file_path.parent.mkdir(parents=True, exist_ok=True)
+        self.render_file = open(render_file_path, "a+", encoding="utf-8")
 
-        self.render_file = open(
-            Path(result_dir) / f"render_{task_id}.html", "a+"
-        )
         self.render_file.truncate(0)
         # write init template
         self.render_file.write(HTML_TEMPLATE.format(body=f"{_config_str}"))
@@ -141,29 +192,54 @@ class RenderHelper(object):
         state_info: StateInfo,
         meta_data: dict[str, Any],
         render_screenshot: bool = False,
+        additional_text: list[str] | None = None,
+        step_idx: int | None = None,
     ) -> None:
         """Render the trajectory"""
         # text observation
         observation = state_info["observation"]
         text_obs = observation["text"]
         info = state_info["info"]
-        new_content = f"<h2>New Page</h2>\n"
-        new_content += f"<h3 class='url'><a href={state_info['info']['page'].url}>URL: {state_info['info']['page'].url}</a></h3>\n"
+        new_content = f"<h2>Action #{step_idx}</h2>\n"
+        new_content += f"<h3 class='url'>URL: <a href={state_info['info']['page'].url}>{state_info['info']['page'].url}</a></h3>\n"
+        new_content += "<h3>Observation</h3>\n"
+        new_content += "<h4>Text</h4>\n"
         new_content += f"<div class='state_obv'><pre>{text_obs}</pre><div>\n"
 
         if render_screenshot:
             # image observation
             img_obs = observation["image"]
-            image = Image.fromarray(img_obs)  # type:ignore
+            image = Image.fromarray(img_obs)
             byte_io = io.BytesIO()
             image.save(byte_io, format="PNG")
             byte_io.seek(0)
             image_bytes = base64.b64encode(byte_io.read())
             image_str = image_bytes.decode("utf-8")
+            new_content += "<h4>Screenshot</h4>\n"
             new_content += f"<img src='data:image/png;base64,{image_str}' style='width:50vw; height:auto;'/>\n"
 
         # meta data
-        new_content += f"<div class='prev_action' style='background-color:pink'>{meta_data['action_history'][-1]}</div>\n"
+        new_content += "<h4>Action History</h4>\n"
+        action_history_str = ""
+        n_actions = len(meta_data['action_history'])
+        for i, prev_action in enumerate(meta_data['action_history']):
+            if i == n_actions - 1:
+                # if is last, bold the action
+                action_history_str += f"<div class='prev_action' style='background-color:pink'><b>{i+1}. {prev_action}</b></div>\n"
+            else:
+                action_history_str += f"<div class='prev_action' style='background-color:pink'>{i+1}. {prev_action}</div>\n"
+        new_content += action_history_str
+
+        # additional text
+        if additional_text:
+            new_content += "<h4>Additional Text</h4>\n"
+            for text_i, text in enumerate(additional_text):
+                # Alternate background color between light green and light blue
+                if text_i % 2 == 0:
+                    bg_color = "#87CEFA"
+                else:
+                    bg_color = "#98FB98"
+                new_content += f"<div class='additional_text' style='background-color: {bg_color}'>#{text_i+1}: {text}</div>\n"
 
         # action
         action_str = get_render_action(
@@ -172,14 +248,22 @@ class RenderHelper(object):
             action_set_tag=self.action_set_tag,
         )
         # with yellow background
+        new_content += "<h4>Action</h4>\n"
         action_str = f"<div class='predict_action'>{action_str}</div>"
         new_content += f"{action_str}\n"
 
         # add new content
         self.render_file.seek(0)
         html = self.render_file.read()
-        html_body = re.findall(r"<body>(.*?)</body>", html, re.DOTALL)[0]
-        html_body += new_content
+        soup = BeautifulSoup(html, 'html.parser')
+        body_tag = soup.body
+
+        if body_tag:
+            html_body = str(body_tag)
+            html_body += new_content
+        else:
+            # Handle the case when <body> tag is not found
+            html_body = new_content
 
         html = HTML_TEMPLATE.format(body=html_body)
         self.render_file.seek(0)

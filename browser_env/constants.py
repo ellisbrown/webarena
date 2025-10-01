@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 
 ROLES = (
@@ -92,7 +93,7 @@ SPECIAL_LOCATORS = (
 )
 
 ASCII_CHARSET = "".join(chr(x) for x in range(32, 128))
-FREQ_UNICODE_CHARSET = "".join(chr(x) for x in range(129, 1000))
+FREQ_UNICODE_CHARSET = "".join(chr(x) for x in range(129, 130000))
 UTTERANCE_MAX_LENGTH = 8192
 ATTRIBUTE_MAX_LENGTH = 256
 TEXT_MAX_LENGTH = 256
@@ -135,6 +136,9 @@ SPECIAL_KEYS = (
 )
 
 SPECIAL_KEY_MAPPINGS = {
+    # canonical names
+    "control": "Control",
+    "shift": "Shift",
     "backquote": "Backquote",
     "minus": "Minus",
     "equal": "Equal",
@@ -165,6 +169,17 @@ SPECIAL_KEY_MAPPINGS = {
     "f10": "F10",
     "f11": "F11",
     "f12": "F12",
+    # synonyms models often output
+    "ctrl": "Control",
+    "ctl": "Control",
+    "cmd": "Meta",
+    "command": "Meta",
+    "win": "Meta",
+    "windows": "Meta",
+    "esc": "Escape",
+    "pgdn": "PageDown",
+    "pgdown": "PageDown",
+    "pgup": "PageUp",
 }
 
 RolesType = Literal[
@@ -293,3 +308,31 @@ IGNORED_ACTREE_PROPERTIES = (
     "multiline",
     "invalid",
 )
+
+INJECTED_ATTR_NAME = "aria-roledescription"
+BID_ATTR = "bid" # the attribute name for extra meta data
+BID_EXPR = r"([-0-9]+)"
+FLOAT_EXPR = r"([+-]?(?:[0-9]*[.])?[0-9]+)"
+BOOL_EXPR = r"([01])"
+
+DATA_REGEXP = re.compile(
+    BID_EXPR
+    + r"_"
+    + FLOAT_EXPR
+    + r"_"
+    + FLOAT_EXPR
+    + r"_"
+    + FLOAT_EXPR
+    + r"_"
+    + FLOAT_EXPR
+    + r"_"
+    + FLOAT_EXPR
+    + r"_"
+    + FLOAT_EXPR
+    + r"_"
+    + BOOL_EXPR
+    + r"_"
+    + r"(.*)"
+)
+
+IN_VIEWPORT_RATIO_THRESHOLD = 0.6

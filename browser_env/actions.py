@@ -117,7 +117,10 @@ def action2str(
     sementic_element: the semantic information of the element
     such as a line in an accessibility tree
     """
-    if action_set_tag == "id_accessibility_tree":
+    if action_set_tag in [
+        "id_accessibility_tree",
+        "id_accessibility_tree_with_captioner",
+    ]:
         element_id = action["element_id"]
         match action["action_type"]:
             case ActionTypes.CLICK:
@@ -145,6 +148,49 @@ def action2str(
                 action_str = "go_forward"
             case ActionTypes.PAGE_FOCUS:
                 action_str = f"page_focus [{action['page_number']}]"
+            case ActionTypes.CLEAR:
+                action_str = f"clear [{element_id}] where [{element_id}] is {semantic_element}"
+            case ActionTypes.STOP:
+                action_str = f"stop [{action['answer']}]"
+            case ActionTypes.NONE:
+                action_str = "none"
+            case _:
+                raise ValueError(
+                    f"Unknown action type {action['action_type']}"
+                )
+    elif action_set_tag == "som":
+        element_id = action["element_id"]
+        match action["action_type"]:
+            case ActionTypes.CLICK:
+                # [ID=X] xxxxx
+                action_str = f"click [{element_id}] where [{element_id}] is {semantic_element}"
+            case ActionTypes.CLEAR:
+                action_str = f"clear [{element_id}] where [{element_id}] is {semantic_element}"
+            case ActionTypes.TYPE:
+                text = "".join([_id2key[i] for i in action["text"]])
+                action_str = (
+                    f"type [{element_id}] [{text}] where [{element_id}] is {semantic_element}"
+                )
+            case ActionTypes.HOVER:
+                action_str = f"hover [{element_id}] where [{element_id}] is {semantic_element}"
+            case ActionTypes.SCROLL:
+                action_str = f"scroll [{action['direction']}]"
+            case ActionTypes.KEY_PRESS:
+                action_str = f"press [{action['key_comb']}]"
+            case ActionTypes.GOTO_URL:
+                action_str = f"goto [{action['url']}]"
+            case ActionTypes.NEW_TAB:
+                action_str = "new_tab"
+            case ActionTypes.PAGE_CLOSE:
+                action_str = "close_tab"
+            case ActionTypes.GO_BACK:
+                action_str = "go_back"
+            case ActionTypes.GO_FORWARD:
+                action_str = "go_forward"
+            case ActionTypes.PAGE_FOCUS:
+                action_str = f"page_focus [{action['page_number']}]"
+            case ActionTypes.CLEAR:
+                action_str = f"clear [{element_id}] where [{element_id}] is {semantic_element}"
             case ActionTypes.STOP:
                 action_str = f"stop [{action['answer']}]"
             case ActionTypes.NONE:
@@ -203,6 +249,16 @@ def action2create_function(action: Action) -> str:
             args.append(f"pw_code={repr(action['pw_code'])}")
             args_str = ", ".join(args)
             return f"create_click_action({args_str})"
+        case ActionTypes.CLEAR:
+            args = []
+            args.append(f"element_id={repr(action['element_id'])}")
+            args.append(
+                f"element_role={repr(_id2role[action['element_role']])}"
+            )
+            args.append(f"element_name={repr(action['element_name'])}")
+            args.append(f"pw_code={repr(action['pw_code'])}")
+            args_str = ", ".join(args)
+            return f"create_clear_action({args_str})"
         case ActionTypes.HOVER:
             args = []
             args.append(f"element_id={repr(action['element_id'])}")
@@ -268,6 +324,7 @@ class ActionTypes(IntEnum):
     SELECT_OPTION = 16
 
     STOP = 17
+    CLEAR = 18
 
     def __str__(self) -> str:
         return f"ACTION_TYPES.{self.name}"
@@ -319,6 +376,18 @@ def is_equivalent(a: Action, b: Action) -> bool:
             return a["pw_code"] == b["pw_code"]
         case ActionTypes.STOP:
             return a["answer"] == b["answer"]
+        case ActionTypes.CLEAR:
+            if a["element_id"] and b["element_id"]:
+                return a["element_id"] == b["element_id"]
+            elif a["element_role"] and b["element_role"]:
+                return (
+                    a["element_role"] == b["element_role"]
+                    and a["element_name"] == b["element_name"]
+                )
+            elif a["pw_code"] and b["pw_code"]:
+                return a["pw_code"] == b["pw_code"]
+            else:
+                return False
         case _:
             raise ValueError(f"Unknown action type: {a['action_type']}")
 
@@ -340,7 +409,7 @@ _id2role: list[RolesType] = sorted(_role2id, key=_role2id.get)  # type: ignore[a
 def _keys2ids(keys: list[int | str] | str) -> list[int]:
     return list(
         map(
-            lambda key: _key2id[str(key)]
+            lambda key: _key2id.get(str(key), _key2id.get(key, " "))
             if isinstance(key, str)
             else int(key),
             keys,
@@ -489,7 +558,15 @@ def create_key_press_action(key_comb: str) -> Action:
         keys = key_comb.split("+")
         mapped_keys = []
         for key in keys:
-            mapped_key = SPECIAL_KEY_MAPPINGS.get(key.lower(), key)
+            trimmed = key.strip()
+            lower_key = trimmed.lower()
+            if lower_key in SPECIAL_KEY_MAPPINGS:
+                mapped_key = SPECIAL_KEY_MAPPINGS[lower_key]
+            elif len(lower_key) == 1 and lower_key.isalpha():
+                # normalize single-letter keys to lowercase
+                mapped_key = lower_key
+            else:
+                mapped_key = trimmed
             mapped_keys.append(mapped_key)
         return "+".join(mapped_keys)
 
@@ -599,6 +676,28 @@ def create_mouse_click_action(
         )
     else:
         raise ValueError("left and top must be both None or both not None")
+    return action
+
+
+@beartype
+def create_clear_action(
+    element_id: str = "",
+    element_role: RolesType = "link",
+    element_name: str = "",
+    pw_code: str = "",
+    nth: int = 0,
+) -> Action:
+    action = create_none_action()
+    action.update(
+        {
+            "action_type": ActionTypes.CLEAR,
+            "element_id": element_id,
+            "element_role": _role2id[element_role],
+            "element_name": element_name,
+            "nth": nth,
+            "pw_code": pw_code,
+        }
+    )
     return action
 
 
@@ -886,6 +985,9 @@ async def aexecute_click_current(page: APage) -> None:
 def execute_type(keys: list[int], page: Page) -> None:
     """Send keystrokes to the focused element."""
     text = "".join([_id2key[key] for key in keys])
+    # Clear the focused element
+    # page.keyboard.press("Meta+A")
+    # page.keyboard.press("Backspace")
     page.keyboard.type(text)
 
 
@@ -1103,6 +1205,7 @@ def execute_action(
 ) -> Page:
     """Execute the action on the ChromeDriver."""
     action_type = action["action_type"]
+
     match action_type:
         case ActionTypes.NONE:
             pass
@@ -1116,6 +1219,12 @@ def execute_action(
 
         case ActionTypes.MOUSE_CLICK:
             execute_mouse_click(action["coords"][0], action["coords"][1], page)
+        case ActionTypes.CLEAR:
+            element_id = action["element_id"]
+            element_center = obseration_processor.get_element_center(element_id)  # type: ignore[attr-defined]
+            execute_mouse_click(element_center[0], element_center[1], page)
+            execute_key_press("Meta+A", page)
+            execute_key_press('Backspace', page)
         case ActionTypes.MOUSE_HOVER:
             execute_mouse_hover(action["coords"][0], action["coords"][1], page)
         case ActionTypes.KEYBOARD_TYPE:
@@ -1126,7 +1235,9 @@ def execute_action(
             # TODO[shuyanzh]: order is temp now
             if action["element_id"]:
                 element_id = action["element_id"]
-                element_center = obseration_processor.get_element_center(element_id)  # type: ignore[attr-defined]
+                if "element_center" not in action:
+                    action["element_center"] = obseration_processor.get_element_center(element_id)  # type: ignore[attr-defined]
+                element_center = action["element_center"]
                 execute_mouse_click(element_center[0], element_center[1], page)
             elif action["element_role"] and action["element_name"]:
                 element_role = int(action["element_role"])
@@ -1144,7 +1255,9 @@ def execute_action(
         case ActionTypes.HOVER:
             if action["element_id"]:
                 element_id = action["element_id"]
-                element_center = obseration_processor.get_element_center(element_id)  # type: ignore[attr-defined]
+                if "element_center" not in action:
+                    action["element_center"] = obseration_processor.get_element_center(element_id)  # type: ignore[attr-defined]
+                element_center = action["element_center"]
                 execute_mouse_hover(element_center[0], element_center[1], page)
             elif action["element_role"] and action["element_name"]:
                 element_role = int(action["element_role"])
@@ -1163,7 +1276,9 @@ def execute_action(
         case ActionTypes.TYPE:
             if action["element_id"]:
                 element_id = action["element_id"]
-                element_center = obseration_processor.get_element_center(element_id)  # type: ignore[attr-defined]
+                if "element_center" not in action:
+                    action["element_center"] = obseration_processor.get_element_center(element_id)  # type: ignore[attr-defined]
+                element_center = action["element_center"]
                 execute_mouse_click(element_center[0], element_center[1], page)
                 execute_type(action["text"], page)
             elif action["element_role"] and action["element_name"]:
@@ -1248,6 +1363,12 @@ async def aexecute_action(
             await aexecute_mouse_click(
                 action["coords"][0], action["coords"][1], page
             )
+        case ActionTypes.CLEAR:
+            element_id = action["element_id"]
+            element_center = obseration_processor.get_element_center(element_id)  # type: ignore[attr-defined]
+            await execute_mouse_click(element_center[0], element_center[1], page)
+            await execute_key_press("Meta+A", page)
+            await execute_key_press('Backspace', page)
         case ActionTypes.MOUSE_HOVER:
             await aexecute_mouse_hover(
                 action["coords"][0], action["coords"][1], page
@@ -1500,35 +1621,53 @@ def create_playwright_action(playwright_code: str) -> Action:
     raise ActionParsingError(f"Unknown playwright action {action}")
 
 
+def preprocess_action_kwargs(action_str: str) -> str:
+    """Convert [key=value] patterns to [value] for backward compatibility.
+    
+    This allows actions to use kwargs like [direction=up] while maintaining
+    compatibility with existing parsers that expect [up].
+    """
+    return re.sub(r'\[(\w+)\s*=\s*([^\]]*)\]', r'[\2]', action_str)
+
+
 @beartype
 def create_id_based_action(action_str: str) -> Action:
     """Main function to return individual id based action"""
     action_str = action_str.strip()
-    action = (
-        action_str.split("[")[0].strip()
-        if "[" in action_str
-        else action_str.split()[0].strip()
-    )
+    # Preprocess kwargs to convert [key=value] to [value]
+    action_str = preprocess_action_kwargs(action_str)
+    if "[" in action_str:
+        action = action_str.split("[")[0].strip()
+    else:
+        actions = action_str.split()
+        if actions:
+            action = actions[0].strip()
+        else:
+            raise ActionParsingError(f"No action specified: {action_str}")
     match action:
         case "click":
-            match = re.search(r"click ?\[(\d+)\]", action_str)
+            match = re.search(r"click\s*\[(\d+)\]", action_str)
             if not match:
                 raise ActionParsingError(f"Invalid click action {action_str}")
             element_id = match.group(1)
             return create_click_action(element_id=element_id)
         case "hover":
-            match = re.search(r"hover ?\[(\d+)\]", action_str)
+            match = re.search(r"hover\s*\[(\d+)\]", action_str)
             if not match:
                 raise ActionParsingError(f"Invalid hover action {action_str}")
             element_id = match.group(1)
             return create_hover_action(element_id=element_id)
         case "type":
-            # add default enter flag
-            if not (action_str.endswith("[0]") or action_str.endswith("[1]")):
-                action_str += " [1]"
+            # Add default enter flag if no third bracket is provided.
+            if not re.search(
+                r"type\s*\[\d+\]\s*\[.*?\]\s*\[\d+\]\s*$",
+                action_str,
+            ):
+                action_str = action_str.rstrip() + " [1]"
 
             match = re.search(
-                r"type ?\[(\d+)\] ?\[(.+)\] ?\[(\d+)\]", action_str
+                r"type\s*\[(\d+)\]\s*\[(.*?)\]\s*\[(\d+)\]",
+                action_str,
             )
             if not match:
                 raise ActionParsingError(f"Invalid type action {action_str}")
@@ -1541,20 +1680,20 @@ def create_id_based_action(action_str: str) -> Action:
                 text += "\n"
             return create_type_action(text=text, element_id=element_id)
         case "press":
-            match = re.search(r"press ?\[(.+)\]", action_str)
+            match = re.search(r"press\s*\[(.+)\]", action_str)
             if not match:
                 raise ActionParsingError(f"Invalid press action {action_str}")
             key_comb = match.group(1)
             return create_key_press_action(key_comb=key_comb)
         case "scroll":
             # up or down
-            match = re.search(r"scroll ?\[?(up|down)\]?", action_str)
+            match = re.search(r"scroll\s*\[?(up|down)\]?", action_str)
             if not match:
                 raise ActionParsingError(f"Invalid scroll action {action_str}")
             direction = match.group(1)
             return create_scroll_action(direction=direction)
         case "goto":
-            match = re.search(r"goto ?\[(.+)\]", action_str)
+            match = re.search(r"goto\s*\[(.+)\]", action_str)
             if not match:
                 raise ActionParsingError(f"Invalid goto action {action_str}")
             url = match.group(1)
@@ -1566,7 +1705,7 @@ def create_id_based_action(action_str: str) -> Action:
         case "go_forward":
             return create_go_forward_action()
         case "tab_focus":
-            match = re.search(r"tab_focus ?\[(\d+)\]", action_str)
+            match = re.search(r"tab_focus\s*\[(\d+)\]", action_str)
             if not match:
                 raise ActionParsingError(
                     f"Invalid tab_focus action {action_str}"
@@ -1576,7 +1715,7 @@ def create_id_based_action(action_str: str) -> Action:
         case "close_tab":
             return create_page_close_action()
         case "stop":  # stop answer
-            match = re.search(r"stop ?\[(.+)\]", action_str)
+            match = re.search(r"stop\s*\[(.+)\]", action_str)
             if not match:  # some tasks don't require an answer
                 answer = ""
             else:

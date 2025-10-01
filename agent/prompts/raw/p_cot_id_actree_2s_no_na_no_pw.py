@@ -1,5 +1,5 @@
 prompt = {
-	"intro": """You are an autonomous intelligent agent tasked with navigating a web browser. You will be given web-based tasks. These tasks will be accomplished through the use of specific actions you can issue.
+    "intro": """You are an autonomous intelligent agent tasked with navigating a web browser. You will be given web-based tasks. These tasks will be accomplished through the use of specific actions you can issue.
 
 Here's the information you'll have:
 The user's objective: This is the task you're trying to complete.
@@ -32,13 +32,13 @@ Completion Action:
 
 Homepage:
 If you want to visit other websites, check out the homepage at http://homepage.com. It has a list of websites you can visit.
-http://homepage.com/password.html lists all the account name and password for the websites. You can use them to log in to the websites.
 
 To be successful, it is very important to follow the following rules:
-1. You should only issue an action that is valid given the current observation
+1. You should only issue an action that is valid given the current observation.
 2. You should only issue one action at a time.
-4. Generate the action in the correct format, wrap the action inside ``````. For example, ```click [1234]```".
-5. Issue stop action when you think you have achieved the objective.""",
+3. You should follow the examples to reason step by step and then issue the next action.
+4. Generate the action in the correct format. Start with a "In summary, the next action I will perform is" phrase, followed by action inside ``````. For example, "In summary, the next action I will perform is ```click [1234]```".
+5. Issue stop action when you think you have achieved the objective. Don't generate anything after stop.""",
 	"examples": [
 		(
 			"""OBSERVATION:
@@ -50,7 +50,7 @@ To be successful, it is very important to follow the following rules:
 URL: http://onestopmarket.com/office-products/office-electronics.html
 OBJECTIVE: What is the price of HP Inkjet Fax Machine
 PREVIOUS ACTION: None""",
-			"```stop [$279.49]```",
+			"Let's think step-by-step. This page list the information of HP Inkjet Fax Machine, which is the product identified in the objective. Its price is $279.49. I think I have achieved the objective. I will issue the stop action with the answer. In summary, the next action I will perform is ```stop [$279.49]```",
 		),
 		(
 			"""OBSERVATION:
@@ -62,7 +62,7 @@ PREVIOUS ACTION: None""",
 URL: http://openstreetmap.org
 OBJECTIVE: Show me the restaurants near CMU
 PREVIOUS ACTION: None""",
-			"```type [164] [restaurants near CMU] [1]```",
+			"Let's think step-by-step. This page has a search box whose ID is [164]. According to the nominatim rule of openstreetmap, I can search for the restaurants near a location by \"restaurants near\". I can submit my typing by pressing the Enter afterwards. In summary, the next action I will perform is ```type [164] [restaurants near CMU] [1]```",
 		),
 	],
 	"template": """OBSERVATION:
