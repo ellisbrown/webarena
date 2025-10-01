@@ -39,6 +39,7 @@ elif "USE_AZURE_OPENAI" in os.environ and os.environ["USE_AZURE_OPENAI"] == "Tru
         api_version=os.environ["AZURE_OPENAI_API_VERSION"],
         azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
     )
+    logger.warning(f"Using Azure OpenAI version: {os.environ['AZURE_OPENAI_API_VERSION']}\nEndpoint: {os.environ['AZURE_OPENAI_ENDPOINT']}")
 else:
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     aclient = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])

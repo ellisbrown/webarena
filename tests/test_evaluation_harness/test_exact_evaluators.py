@@ -1,7 +1,6 @@
 import json
 import os
-import random
-from glob import glob
+from pathlib import Path
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +22,9 @@ from webarena.evaluation_harness.evaluators import EvaluatorComb
 
 IN_GITHUB_ACTIONS = os.getenv("GITHUB_ACTIONS") == "true"
 HEADLESS = True
-config_file_folder = "tests/test_evaluation_harness/configs"
+
+current_dir = Path(__file__).parent
+config_file_folder = current_dir / "configs"
 
 
 def tf_roll_out(
@@ -52,7 +53,7 @@ def tf_roll_out(
 def test_string_match_success(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    config_file = f"{config_file_folder}/string_match.json"
+    config_file = config_file_folder / "string_match.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -71,7 +72,7 @@ def test_string_match_success(
 
 
 def test_string_match_fail(script_browser_env: ScriptBrowserEnv) -> None:
-    config_file = f"{config_file_folder}/string_match.json"
+    config_file = config_file_folder / "string_match.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -91,7 +92,7 @@ def test_string_match_fail(script_browser_env: ScriptBrowserEnv) -> None:
 
 # @pytest.mark.skip(reason="This functionality does not work properly. TODO: PLEASE FIX.")
 def test_string_evaluator_fuzzy_match(script_browser_env: ScriptBrowserEnv) -> None:
-    config_file = f"{config_file_folder}/string_fuzzy_match.json"
+    config_file = config_file_folder / "string_fuzzy_match.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -110,7 +111,7 @@ def test_string_evaluator_fuzzy_match(script_browser_env: ScriptBrowserEnv) -> N
 
 
 def test_url_exact_match_success(script_browser_env: ScriptBrowserEnv) -> None:
-    config_file = f"{config_file_folder}/url_exact_match.json"
+    config_file = config_file_folder / "url_exact_match.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -130,7 +131,7 @@ def test_url_exact_match_success(script_browser_env: ScriptBrowserEnv) -> None:
 
 
 def test_url_exact_match_fail(script_browser_env: ScriptBrowserEnv) -> None:
-    config_file = f"{config_file_folder}/url_exact_match.json"
+    config_file = config_file_folder / "url_exact_match.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -153,7 +154,7 @@ def test_url_exact_match_fail(script_browser_env: ScriptBrowserEnv) -> None:
 def test_html_content_match_success(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    config_file = f"{config_file_folder}/html_content_exact_match.json"
+    config_file = config_file_folder / "html_content_exact_match.json"
 
     # randomly sample a string
     agent = TeacherForcingAgent()
@@ -174,7 +175,7 @@ def test_html_content_match_success(
 
 
 def test_html_content_match_fail(script_browser_env: ScriptBrowserEnv) -> None:
-    config_file = f"{config_file_folder}/html_content_exact_match.json"
+    config_file = config_file_folder / "html_content_exact_match.json"
 
     # randomly sample a string
     agent = TeacherForcingAgent()
@@ -197,7 +198,7 @@ def test_html_content_match_fail(script_browser_env: ScriptBrowserEnv) -> None:
 def test_html_content_element_match_success(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    config_file = f"{config_file_folder}/html_content_element_exact_match.json"
+    config_file = config_file_folder / "html_content_element_exact_match.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -222,7 +223,7 @@ def test_html_content_element_match_success(
 def test_html_content_element_match_fail(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    config_file = f"{config_file_folder}/html_content_element_exact_match.json"
+    config_file = config_file_folder / "html_content_element_exact_match.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -247,7 +248,7 @@ def test_html_content_element_match_fail(
 def test_html_content_url_comb_success(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    config_file = f"{config_file_folder}/html_content_url_comb.json"
+    config_file = config_file_folder / "html_content_url_comb.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -277,7 +278,7 @@ def test_html_content_url_comb_success(
 def test_func_success(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    config_file = f"{config_file_folder}/func_eval_success.json"
+    config_file = config_file_folder / "func_eval_success.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -300,7 +301,7 @@ def test_func_success(
 def test_func_fail(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    config_file = f"{config_file_folder}/func_eval_fail.json"
+    config_file = config_file_folder / "func_eval_fail.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -320,7 +321,7 @@ def test_func_fail(
 def test_func_url_func_last_success(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    config_file = f"{config_file_folder}/func_url_func_1.json"
+    config_file = config_file_folder / "func_url_func_1.json"
 
     agent = TeacherForcingAgent()
     agent.set_action_set_tag(tag="playwright")
@@ -335,22 +336,21 @@ def test_func_url_func_last_success(
     score = evalutor(
         trajectory, config_file, env.page
     )
+    # TODO: why failing?
     assert score == 1.0
 
 
 def test_html_required_values_success(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    for config_file in glob(
-        f"{config_file_folder}/html_required_values_success_*.json"
-    ):
+    for config_file in config_file_folder.glob("html_required_values_success_*.json"):
         # change the URL placeholder with the concrete URL
         with open(config_file, "r") as f:
             configs = json.load(f)
             configs["eval"]["reference_url"] = configs["eval"][
                 "reference_url"
             ].replace("__SHOPPING__", SHOPPING)
-        tmp_config = config_file.replace(".json", ".json.tmp")
+        tmp_config = str(config_file).replace(".json", ".json.tmp")
         with open(tmp_config, "w+") as f:
             json.dump(configs, f, indent=4)
 
@@ -378,8 +378,8 @@ def test_page_image_evaluator(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
     for config_file in [
-        f"{config_file_folder}/image_evaluator_yes.json",
-        f"{config_file_folder}/image_evaluator_yes_direct_img.json",
+        config_file_folder / "image_evaluator_yes.json",
+        config_file_folder / "image_evaluator_yes_direct_img.json",
     ]:
         # change the URL placeholder with the concrete URL
         with open(config_file, "r") as f:
@@ -392,7 +392,7 @@ def test_page_image_evaluator(
             )
             for e in configs["eval"]["page_image_query"]:
                 e["eval_image_url"] = e["eval_image_url"].replace("__SHOPPING__", SHOPPING)
-        tmp_config = config_file.replace(".json", ".json.tmp")
+        tmp_config = str(config_file).replace(".json", ".json.tmp")
         with open(tmp_config, "w+") as f:
             json.dump(configs, f, indent=4)
 
@@ -429,7 +429,7 @@ def test_page_image_evaluator(
 def test_page_image_evaluator_yes_no(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    config_file = f"{config_file_folder}/image_evaluator_yes_no.json"
+    config_file = config_file_folder / "image_evaluator_yes_no.json"
     # change the URL placeholder with the concrete URL
     with open(config_file, "r") as f:
         configs = json.load(f)
@@ -441,7 +441,7 @@ def test_page_image_evaluator_yes_no(
         )
         for e in configs["eval"]["page_image_query"]:
             e["eval_image_url"] = e["eval_image_url"].replace("__SHOPPING__", SHOPPING)
-    tmp_config = config_file.replace(".json", ".json.tmp")
+    tmp_config = str(config_file).replace(".json", ".json.tmp")
     with open(tmp_config, "w+") as f:
         json.dump(configs, f, indent=4)
 
@@ -469,16 +469,14 @@ def test_page_image_evaluator_yes_no(
 def test_html_required_values_failure(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    for config_file in glob(
-        f"{config_file_folder}/html_required_values_failure_*.json"
-    ):
+    for config_file in config_file_folder.glob("html_required_values_failure_*.json"):
         # change the URL placeholder with the concrete URL
         with open(config_file, "r") as f:
             configs = json.load(f)
             configs["eval"]["reference_url"] = configs["eval"][
                 "reference_url"
             ].replace("__SHOPPING__", SHOPPING)
-        tmp_config = config_file.replace(".json", ".json.tmp")
+        tmp_config = str(config_file).replace(".json", ".json.tmp")
         with open(tmp_config, "w+") as f:
             json.dump(configs, f, indent=4)
 
@@ -507,10 +505,10 @@ def test_exact_image(
 ) -> None:
     for config_file, expected_score in zip(
         [
-            f"{config_file_folder}/exact_image_success.json",
-            f"{config_file_folder}/exact_image_failure.json",
-            f"{config_file_folder}/exact_image_resize_failure_1.json",
-            f"{config_file_folder}/exact_image_resize_failure_2.json",
+            config_file_folder / "exact_image_success.json",
+            config_file_folder / "exact_image_failure.json",
+            config_file_folder / "exact_image_resize_failure_1.json",
+            config_file_folder / "exact_image_resize_failure_2.json",
         ],
         [1.0, 0.0, 0.0, 0.0],
     ):
@@ -528,7 +526,7 @@ def test_exact_image(
                 e["eval_fuzzy_image_match"] = e["eval_fuzzy_image_match"].replace("__REDDIT__", REDDIT)
             configs["image"] = configs["image"].replace("__REDDIT__", REDDIT)
             configs["intent"] = configs["intent"].replace("__REDDIT__", REDDIT)
-        tmp_config = config_file.replace(".json", ".tmp.json")
+        tmp_config = str(config_file).replace(".json", ".tmp.json")
         with open(tmp_config, "w+") as f:
             json.dump(configs, f, indent=4)
 
@@ -556,7 +554,7 @@ def test_exact_image(
 def test_exact_image_resize_success(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
-    config_file = f"{config_file_folder}/exact_image_resize_template.json"
+    config_file = config_file_folder / "exact_image_resize_template.json"
     resized_img_path = "resized_img.tmp.png"
     for downscale, expected_score in zip(
         [2, 8], [1.0, 0.0]
@@ -589,7 +587,7 @@ def test_exact_image_resize_success(
 
             configs["eval"]["page_image_query"][0]["eval_fuzzy_image_match"] = resized_img_path
 
-        tmp_config = config_file.replace(".json", ".tmp.json")
+        tmp_config = str(config_file).replace(".json", ".tmp.json")
         with open(tmp_config, "w+") as f:
             json.dump(configs, f, indent=4)
 

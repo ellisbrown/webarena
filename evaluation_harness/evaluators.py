@@ -56,7 +56,7 @@ class Evaluator(object):
         trajectory: Trajectory,
         config_file: Path | str,
         page: Page | PseudoPage,
-        client: CDPSession,
+        client: CDPSession | None = None,
     ) -> float:
         raise NotImplementedError
 
@@ -545,10 +545,10 @@ class HTMLContentExactEvaluator(Evaluator):
                     f"Unknown required_contents: {target['required_contents'].keys()}"
                 )
 
-            if prev_page:
-                page.close()
-                page = prev_page
-                prev_page = None
+            # if prev_page:
+            #     page.close()
+            #     page = prev_page
+            #     prev_page = None
 
         return score
 
@@ -687,12 +687,12 @@ class EvaluatorComb:
         trajectory: Trajectory,
         config_file: Path | str,
         page: Page | PseudoPage,
-        client: CDPSession | None,
+        client: CDPSession | None = None,
     ) -> float:
 
         score = 1.0
         for evaluator in self.evaluators:
-            cur_score = evaluator(trajectory, config_file, page)
+            cur_score = evaluator(trajectory, config_file, page, client)
             score *= cur_score
 
         return score

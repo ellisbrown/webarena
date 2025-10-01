@@ -289,5 +289,6 @@ def test_click_open_new_tab(
         )
     )
     # assert "heading 'Example Domain'" in obs["text"]
+    # TODO: why failing?
     assert "heading 'Welcome to My Website'" in obs["text"]
     assert "www.example.com" in info['page'].url, info

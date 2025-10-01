@@ -1,6 +1,6 @@
 import json
 import os
-
+from pathlib import Path
 from webarena.browser_env import ScriptBrowserEnv
 from webarena.browser_env.env_config import *
 from webarena.evaluation_harness.helper_functions import (
@@ -21,14 +21,16 @@ from webarena.evaluation_harness.helper_functions import (
 )
 
 HEADLESS = True
-config_file_folder = "tests/test_evaluation_harness/configs"
+
+current_dir = Path(__file__).parent
+config_file_folder = current_dir / "configs"
 
 
 def test_shopping_get_attributes(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
     env = script_browser_env
-    config_file = f"{config_file_folder}/config_shopping_attr.json.tmp"
+    config_file = config_file_folder / "config_shopping_attr.json.tmp"
 
     with open(config_file, "w") as f:
         json.dump({"storage_state": ".auth/shopping_state.json"}, f)
@@ -56,7 +58,7 @@ def test_get_query_text(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
     env = script_browser_env
-    config_file = f"{config_file_folder}/config_shopping_query.json.tmp"
+    config_file = config_file_folder / "config_shopping_query.json.tmp"
 
     with open(config_file, "w") as f:
         json.dump({"storage_state": ".auth/shopping_state.json"}, f)
@@ -82,7 +84,7 @@ def test_get_product_price(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
     env = script_browser_env
-    config_file = f"{config_file_folder}/config_shopping_price.json.tmp"
+    config_file = config_file_folder / "config_shopping_price.json.tmp"
 
     with open(config_file, "w") as f:
         json.dump({"storage_state": ".auth/shopping_state.json"}, f)
@@ -105,7 +107,7 @@ def test_get_num_reviews(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
     env = script_browser_env
-    config_file = f"{config_file_folder}/config_shopping_num_reviews.json.tmp"
+    config_file = config_file_folder / "config_shopping_num_reviews.json.tmp"
 
     with open(config_file, "w") as f:
         json.dump({"storage_state": ".auth/shopping_state.json"}, f)
@@ -124,7 +126,7 @@ def test_get_product_rating(
 ) -> None:
     env = script_browser_env
     config_file = (
-        f"{config_file_folder}/config_shopping_rating_percentage.json.tmp"
+        config_file_folder / "config_shopping_rating_percentage.json.tmp"
     )
 
     with open(config_file, "w") as f:
@@ -193,7 +195,7 @@ def test_shopping_get_order_product_quantity(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
     env = script_browser_env
-    config_file = f"{config_file_folder}/config_test_shopping_get_order_product_quantity.json.tmp"
+    config_file = config_file_folder / "config_test_shopping_get_order_product_quantity.json.tmp"
 
     with open(config_file, "w") as f:
         json.dump({"storage_state": ".auth/shopping_state.json"}, f)
@@ -217,7 +219,7 @@ def test_shopping_get_order_product_option(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
     env = script_browser_env
-    config_file = f"{config_file_folder}/config_test_shopping_get_order_product_option.json.tmp"
+    config_file = config_file_folder / "config_test_shopping_get_order_product_option.json.tmp"
 
     with open(config_file, "w") as f:
         json.dump({"storage_state": ".auth/shopping_state.json"}, f)
@@ -238,7 +240,7 @@ def test_reddit_get_latest_comment_content_by_username(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
     env = script_browser_env
-    config_file = f"{config_file_folder}/config_test_reddit_get_post_comment_tree.json.tmp"
+    config_file = config_file_folder / "config_test_reddit_get_post_comment_tree.json.tmp"
 
     with open(config_file, "w") as f:
         json.dump({"storage_state": ".auth/reddit_state.json"}, f)
@@ -258,7 +260,7 @@ def test_reddit_get_parent_comment_username_of_latest_comment_by_username(
     script_browser_env: ScriptBrowserEnv,
 ) -> None:
     env = script_browser_env
-    config_file = f"{config_file_folder}/config_test_reddit_get_parent_comment_tree.json.tmp"
+    config_file = config_file_folder / "config_test_reddit_get_parent_comment_tree.json.tmp"
 
     with open(config_file, "w") as f:
         json.dump({"storage_state": ".auth/reddit_state.json"}, f)
