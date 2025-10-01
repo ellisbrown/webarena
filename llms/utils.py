@@ -14,13 +14,13 @@ from .providers.openai_utils import (
     generate_from_openai_chat_completion,
     generate_from_openai_completion,
 )
-from .lm_config import lm_config
+from .lm_config import LMConfig
 
 APIInput = str | list[Any] | dict[str, Any]
 
 
 def call_llm(
-    lm_config: lm_config.LMConfig,
+    lm_config: LMConfig,
     prompt: APIInput,
     num_outputs: int = 1,
 ) -> str:

@@ -1,0 +1,23 @@
+{
+    "sites": ["shopping"],
+    "task_id": 361,
+    "require_login": true,
+    "storage_state": "./.auth/shopping_state.json",
+    "start_url": null,
+    "geolocation": null,
+    "intent_template": "Show me the {{info}} for order number {{order_number}}.",
+    "instantiation_dict": {},
+    "intent": "Show me the order statuses for order number 170 and 189.",
+    "require_reset": false,
+    "eval": {
+        "eval_types": ["string_match"],
+        "reference_answers": {
+            "fuzzy_match": [
+                "170: cancelled",
+                "189: pending"
+            ]
+        },
+        "reference_url": "",
+        "program_html": []
+    }
+}

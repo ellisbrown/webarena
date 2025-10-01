@@ -3,7 +3,7 @@ from typing import AsyncGenerator, Generator
 import pytest
 import pytest_asyncio
 
-from browser_env import AsyncScriptBrowserEnv, ScriptBrowserEnv
+from webarena.browser_env import AsyncScriptBrowserEnv, ScriptBrowserEnv
 
 HEADLESS = True
 SLOW_MO = 0
@@ -44,6 +44,20 @@ def accessibility_tree_script_browser_env() -> Generator[
         headless=HEADLESS,
         slow_mo=SLOW_MO,
         observation_type="accessibility_tree",
+    )
+    yield env
+    env.close()
+
+
+@pytest.fixture(scope="function")
+def accessibility_tree_script_browser_env_with_sleep() -> Generator[
+    ScriptBrowserEnv, None, None
+]:
+    env = ScriptBrowserEnv(
+        headless=HEADLESS,
+        slow_mo=SLOW_MO,
+        observation_type="accessibility_tree",
+        sleep_after_execution=1.0
     )
     yield env
     env.close()
