@@ -19,6 +19,8 @@ dev = [
     "pytest-asyncio>=0.23.8",
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.setuptools]
 packages = ["webarena", "webarena.browser_env", "webarena.agent", "webarena.evaluation_harness", "webarena.llms", "webarena.llms.providers"]
