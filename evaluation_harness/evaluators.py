@@ -464,7 +464,7 @@ class HTMLContentExactEvaluator(Evaluator):
                 score = 0.0
                 break
 
-            selected_element = html.unescape(selected_element)
+            selected_element = html.unescape(str(selected_element))
 
             if "exact_match" in target["required_contents"]:
                 required_contents = target["required_contents"]["exact_match"]
