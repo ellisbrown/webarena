@@ -336,7 +336,6 @@ def test_func_url_func_last_success(
     score = evalutor(
         trajectory, config_file, env.page
     )
-    # TODO: why failing?
     assert score == 1.0
 
 
