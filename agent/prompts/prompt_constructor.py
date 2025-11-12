@@ -237,14 +237,22 @@ class CoTPromptConstructor(PromptConstructor):
         page = state_info["info"]["page"]
         url = page.url
         previous_action_str = meta_data["action_history"][-1]
-        current = template.format(
-            objective=intent,
-            url=self.map_url_to_real(url),
-            observation=obs,
-            previous_action=previous_action_str,
-        )
+        
+        # Build format arguments dynamically based on keywords
+        format_args = {
+            "objective": intent,
+            "url": self.map_url_to_real(url),
+            "observation": obs,
+            "previous_action": previous_action_str,
+        }
+        
+        # Add scratchpad if it's in the keywords
+        if "scratchpad" in keywords:
+            format_args["scratchpad"] = meta_data.get("scratchpad_str", "(empty)")
+        
+        current = template.format(**format_args)
 
-        assert all([f"{{k}}" not in current for k in keywords])
+        assert all([f"{{{k}}}" not in current for k in keywords])
 
         prompt = self.get_lm_api_input(intro, examples, current)
         return prompt
@@ -297,14 +305,22 @@ class MultimodalCoTPromptConstructor(CoTPromptConstructor):
         page = state_info["info"]["page"]
         url = page.url
         previous_action_str = meta_data["action_history"][-1]
-        current = template.format(
-            objective=intent,
-            url=self.map_url_to_real(url),
-            observation=obs,
-            previous_action=previous_action_str,
-        )
+        
+        # Build format arguments dynamically based on keywords
+        format_args = {
+            "objective": intent,
+            "url": self.map_url_to_real(url),
+            "observation": obs,
+            "previous_action": previous_action_str,
+        }
+        
+        # Add scratchpad if it's in the keywords
+        if "scratchpad" in keywords:
+            format_args["scratchpad"] = meta_data.get("scratchpad_str", "(empty)")
+        
+        current = template.format(**format_args)
 
-        assert all([f"{{k}}" not in current for k in keywords])
+        assert all([f"{{{k}}}" not in current for k in keywords])
 
         prompt = self.get_lm_api_input(
             intro, examples, current, page_screenshot_img, images
